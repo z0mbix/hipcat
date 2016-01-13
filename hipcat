@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+#
+# Send a message to one or more hipchat rooms using the HipChat V1 API
+#
+
+[[ $TRACE ]] && set -x
+set -e
+
+usage() {
+  echo "Usage: $0 -r [room_id(s)] -m [message -c [colour] -f [from] -n -h" 1>&2
+  echo 'At least one room ID and a message (including stdin) is required.'
+  echo 'Use -f to change who the message is from'
+  echo 'Use -n to notify room'
+  echo 'Use -h to send an HTML message'
+  echo 'Use -c to set the message colour (yellow|red|green|purple|gray|random)'
+  echo 'Your hipchat token should be specified by exporting HIPCAT_TOKEN'
+  exit 1
+}
+
+# Get API Key
+auth_token="$HIPCAT_TOKEN"
+from='Hipcat'
+colour='green'
+format='text'
+notify=0
+
+while getopts ":r:m:c:f:hn" o; do
+  case "${o}" in
+    r) rooms=${OPTARG} ;;
+    m) message=${OPTARG} ;;
+    c) colour=${OPTARG} ;;
+    f) from=${OPTARG} ;;
+    h) format='html' ;;
+    n) notify=1 ;;
+    *) usage ;;
+  esac
+done
+
+# You must specify the hipchat token (HIPCAT_TOKEN)
+if [[ -z "$auth_token" ]]; then
+  usage
+fi
+
+# Allow setting rooms as an environment variable
+if [[ -n "$HIPCAT_ROOMS" ]]; then
+  rooms="$HIPCAT_ROOMS"
+fi
+
+# You must specify at least one room id and a message
+if [[ -z "${rooms}" ]]; then
+  usage
+fi
+
+# If message is not given as an option, read from stdin
+if [[ -z "${message}" ]]; then
+  message="$(cat)"
+fi
+
+# Replace spaces with +
+message=${message// /+}
+
+if [ $TRACE ]; then
+  echo room_ids:       $rooms
+  echo message:        $message
+  echo format:         $format
+  echo from:           $from
+  echo colour:         $colour
+  echo notify:         $notify
+fi
+
+for room_id in ${rooms[@]}; do
+  curl -s \
+-H "application/x-www-form-urlencoded" \
+-X POST \
+"https://api.hipchat.com/v1/rooms/message?auth_token=${auth_token}\
+&message_format=${format}\
+&room_id=${room_id}\
+&message=${message}\
+&from=${from}\
+&notify=${notify}\
+&color=${colour}" >/dev/null
+done
+
